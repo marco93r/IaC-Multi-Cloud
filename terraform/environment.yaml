@@ -1,0 +1,38 @@
+
+cloud_provider: hetzner
+
+region:
+  azure: westeurope
+  hetzner: fsn1
+  aws: eu-central-1
+
+ssh_key: hetzner_key
+
+vm_config:
+  management:
+    azure: Standard_B1s
+    hetzner: cpx21
+    aws: t3.micro
+
+  k8s_master:
+    azure: Standard_B2s
+    hetzner: cpx31
+    aws: t3.small
+
+  k8s_worker:
+    azure: Standard_B2ms
+    hetzner: cpx31
+    aws: t3.medium
+
+  storage:
+    azure: Standard_B2s
+    hetzner: cpx21
+    aws: t3.small
+    extra_disks:
+      - { name: "data-1", size: 20, type: "Standard_LRS" }
+      - { name: "data-2", size: 20, type: "Standard_LRS" }
+
+  monitoring:
+    azure: Standard_B1ms
+    hetzner: cpx21
+    aws: t3.micro
