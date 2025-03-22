@@ -1,38 +1,73 @@
-
-cloud_provider: azure
+cloud_provider: aws
+ssh_key:
+  azure: ~/.ssh/id_rsa.pub
+  hetzner: hetzner_key
+  aws: ~/.ssh/id_rsa.pub
 
 region:
   azure: westeurope
   hetzner: fsn1
   aws: eu-central-1
 
-ssh_key: ~/.ssh/id_rsa.pub
+instance_type:
+  azure:
+    management: Standard_B1ms
+    k8s_master: Standard_B2s
+    k8s_worker: Standard_B2s
+    storage: Standard_B2s
+    monitoring: Standard_B1s
+  hetzner:
+    management: cpx21
+    k8s_master: cpx31
+    k8s_worker: cpx31
+    storage: cpx31
+    monitoring: cpx21
+  aws:
+    management: t2.micro
+    k8s_master: t2.medium
+    k8s_worker: t2.medium
+    storage: t2.micro
+    monitoring: t2.micro
 
-vm_config:
-  management:
-    azure: Standard_B1s
-    hetzner: cpx21
-    aws: t3.micro
+vm_count:
+  azure:
+    management: 1
+    k8s_master: 1
+    k8s_worker: 1
+    storage: 1
+    monitoring: 1
+  hetzner:
+    management: 1
+    k8s_master: 1
+    k8s_worker: 1
+    storage: 1
+    monitoring: 1
+  aws:
+    management: 1
+    k8s_master: 1
+    k8s_worker: 1
+    storage: 1
+    monitoring: 1
 
-  k8s_master:
-    azure: Standard_B2s
-    hetzner: cpx31
-    aws: t3.small
-
-  k8s_worker:
-    azure: Standard_B2ms
-    hetzner: cpx31
-    aws: t3.medium
-
-  storage:
-    azure: Standard_B2s
-    hetzner: cpx21
-    aws: t3.small
-    extra_disks:
-      - { name: "data-1", size: 20, type: "Standard_LRS" }
-      - { name: "data-2", size: 20, type: "Standard_LRS" }
-
-  monitoring:
-    azure: Standard_B1ms
-    hetzner: cpx21
-    aws: t3.micro
+extra_disks:
+  azure:
+    - name: disk1
+      size: 20
+      type: Standard_LRS
+    - name: disk2
+      size: 20
+      type: Standard_LRS
+  hetzner:
+    - name: disk1
+      size: 20
+      type: hdd
+    - name: disk2
+      size: 20
+      type: hdd
+  aws:
+    - name: disk1
+      size: 20
+      type: gp2
+    - name: disk2
+      size: 20
+      type: gp2

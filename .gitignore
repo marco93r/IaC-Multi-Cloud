@@ -1,3 +1,10 @@
 .terraform
 terraform.tfstate
 terraform.tfstate.backup
+terraform-hetzner.tfstate
+terraform-hetzner.tfstate.backup
+terraform-azure.tfstate
+terraform-azure.tfstate.backup
+terraform-aws.tfstate
+terraform-aws.tfstate.backup
+.terraform.lock.hcl
