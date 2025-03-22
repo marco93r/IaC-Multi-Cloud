@@ -1,12 +1,12 @@
 
-cloud_provider: hetzner
+cloud_provider: azure
 
 region:
   azure: westeurope
   hetzner: fsn1
   aws: eu-central-1
 
-ssh_key: hetzner_key
+ssh_key: ~/.ssh/id_rsa.pub
 
 vm_config:
   management:

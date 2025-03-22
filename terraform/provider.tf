@@ -16,17 +16,13 @@ terraform {
   }
 }
 
-provider "hcloud" {
-  alias = "hetzner"
-}
+provider "hcloud" {}
 
 provider "azurerm" {
   features {}
-  alias                      = "azure"
   skip_provider_registration = true
 }
 
 provider "aws" {
   region = try(var.region["aws"], "eu-central-1")
-  alias  = "aws"
 }
