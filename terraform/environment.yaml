@@ -2,7 +2,11 @@ cloud_provider: aws
 ssh_key:
   azure: ~/.ssh/id_rsa.pub
   hetzner: hetzner_key
-  aws: ~/.ssh/id_rsa.pub
+  aws: id_rsa_aws
+ssh_key_path:
+  azure: /home/adminuser/.ssh/id_rsa
+  hetzner: /home/adminuser/.ssh/id_ed25519
+  aws: /home/adminuser/.ssh/id_rsa_aws
 
 region:
   azure: westeurope

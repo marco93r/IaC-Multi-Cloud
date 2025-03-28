@@ -1,0 +1,126 @@
+- name: Setup Persistent Storage
+  hosts: persistent_storage
+  become: yes
+  tasks:
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install dependencies
+      ansible.builtin.apt:
+        name: lsof
+        state: present
+
+    - name: List attached disks
+      ansible.builtin.command:
+        cmd: lsblk -dno NAME,SIZE,TYPE
+      register: disk_info
+
+    - block:
+        - name: Ensure /mnt/disk1 exists
+          ansible.builtin.file:
+            path: /mnt/disk1
+            state: directory
+            mode: '0775'
+            owner: '1001'
+            group: '1001'
+
+        - name: Ensure /mnt/disk2 exists
+          ansible.builtin.file:
+            path: /mnt/disk2
+            state: directory
+            mode: '0775'
+            owner: '1001'
+            group: '1001'
+
+        - name: Format /dev/sdc
+          ansible.builtin.command:
+            cmd: mkfs.ext4 /dev/sdc
+
+        - name: Format /dev/sdd
+          ansible.builtin.command:
+            cmd: mkfs.ext4 /dev/sdd
+
+        - name: Add disks to fstab for persistence
+          ansible.builtin.lineinfile:
+            path: /etc/fstab
+            line: "{{ item }}"
+            state: present
+          loop:
+            - "/dev/sdc /mnt/disk1 ext4 defaults 0 2"
+            - "/dev/sdd /mnt/disk2 ext4 defaults 0 2"
+
+        - name: Mount /dev/sdc
+          ansible.builtin.mount:
+            path: /mnt/disk1
+            src: /dev/sdc
+            fstype: ext4
+            state: mounted
+
+        - name: Mount /dev/sdd
+          ansible.builtin.mount:
+            path: /mnt/disk2
+            src: /dev/sdd
+            fstype: ext4
+            state: mounted
+      when: disk_info is defined
+
+    - name: Ensure WordPress directory exists on storage VM
+      ansible.builtin.file:
+        path: /mnt/disk2/wordpress
+        state: directory
+        owner: "1001"
+        group: "1001"
+        mode: "0775"
+
+    - name: Set permissions on mounted directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0775'
+        owner: '1001'
+        group: '1001'
+      loop:
+        - /mnt/disk1
+        - /mnt/disk2
+
+    - name: Install NFS Server
+      ansible.builtin.apt:
+        name: nfs-kernel-server
+        state: present
+
+    - name: Add disk1 to /etc/exports
+      ansible.builtin.lineinfile:
+        path: /etc/exports
+        line: "/mnt/disk1  *(rw,sync,no_root_squash,no_subtree_check)"
+        state: present
+    
+    - name: Add disk2 to /etc/exports
+      ansible.builtin.lineinfile:
+        path: /etc/exports
+        line: "/mnt/disk2  *(rw,sync,no_root_squash,no_subtree_check)"
+        state: present
+
+    - name: Export settings
+      ansible.builtin.command:
+        cmd: sudo exportfs -rav
+
+    - name: Restart nfs-server
+      ansible.builtin.systemd:
+        name: nfs-server
+        state: restarted
+
+    # - name: Set permissions on /mnt/disk1
+    #   ansible.builtin.shell: |
+    #     sudo chown -R 1001:1001 /mnt/disk1
+    #     sudo chmod -R 775 /mnt/disk1
+    #     sudo chown -R 1001:1001 /mnt/disk2
+    #     sudo chmod -R 775 /mnt/disk2
+    #   become: yes
+
+    # - name: Set permissions on /mnt/disk2
+    #   ansible.builtin.shell: |
+    #     sudo chown -R 1001:1001 /mnt/disk2
+    #     sudo chmod -R 775 /mnt/disk2
+    #   become: yes

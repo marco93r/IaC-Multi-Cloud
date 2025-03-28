@@ -3,26 +3,31 @@ variable "cloud_provider" {
 }
 
 variable "region" {
-  type = string
+  type = string 
 }
 
 variable "ssh_key" {
   type = string
 }
 
+variable "ssh_key_path" {
+  type = string
+}
+
 variable "instance_type" {
-  type = map(string)
+  type = map(string) 
 }
 
 variable "vm_count" {
-  type = map(number)
+  type = map(number)  
 }
 
 variable "extra_disks" {
-  type = list(object({
+  type = list(object({  
     name = string
     size = number
     type = string
   }))
   default = []
 }
+

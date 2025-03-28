@@ -1,0 +1,121 @@
+- name: Setup Grafana and Prometheus
+  hosts: monitoring_logging
+  become: yes
+  vars:
+    listen_address: "0.0.0.0"
+    listen_port: 9090
+    grafana_repo_url: "https://packages.grafana.com/oss/deb"
+    grafana_gpg_key: "https://apt.grafana.com/gpg.key"
+    prometheus_version: "2.53.3"
+    prometheus_url: "https://github.com/prometheus/prometheus/releases/download/v{{ prometheus_version }}/prometheus-{{ prometheus_version }}.linux-amd64.tar.gz"
+    prometheus_dir: "/opt/prometheus"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - software-properties-common
+          - wget
+          - gnupg
+        state: present
+
+    - name: Download and add Grafana GPG key
+      ansible.builtin.shell:
+        cmd: |
+          mkdir -p /etc/apt/keyrings
+          wget -q -O - https://apt.grafana.com/gpg.key | gpg --dearmor | sudo tee /etc/apt/keyrings/grafana.gpg > /dev/null
+      args:
+        creates: /etc/apt/keyrings/grafana.gpg
+
+    - name: Add Grafana repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/grafana.gpg] {{ grafana_repo_url }} stable main"
+        filename: grafana
+        state: present
+
+    - name: Install Grafana
+      ansible.builtin.apt:
+        name: grafana
+        update_cache: yes
+
+    - name: Enable and start Grafana service
+      ansible.builtin.systemd:
+        name: grafana-server
+        state: started
+        enabled: yes
+
+    - name: Download Prometheus
+      ansible.builtin.get_url:
+        url: "{{ prometheus_url }}"
+        dest: "/tmp/prometheus.tar.gz"
+        mode: '0644'
+
+    - name: Extract Prometheus
+      ansible.builtin.unarchive:
+        src: "/tmp/prometheus.tar.gz"
+        dest: "/tmp"
+        remote_src: yes
+
+    - name: Create Prometheus group
+      ansible.builtin.group:
+        name: prometheus
+        state: present
+
+    - name: Create Prometheus user and group
+      ansible.builtin.user:
+        name: prometheus
+        group: prometheus
+        system: yes
+        shell: /sbin/nologin
+        create_home: no
+
+    - name: Move Prometheus binaries
+      ansible.builtin.copy:
+        src: "/tmp/prometheus-{{ prometheus_version }}.linux-amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: '0755'
+        owner: prometheus
+        group: prometheus
+        remote_src: yes
+      loop:
+        - prometheus
+        - promtool
+
+    - name: Create Prometheus directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+        mode: '0755'
+      loop:
+        - "{{ prometheus_dir }}"
+        - "{{ prometheus_dir }}/data"
+        - "/etc/prometheus"
+        - "/etc/prometheus/rules"
+        - "/etc/prometheus/rules.d"
+        - "/etc/prometheus/files_sd"
+        - "/var/lib/prometheus"
+
+    - name: Copy Prometheus configuration files
+      ansible.builtin.template:
+        src: "templates/prometheus.yml.j2"
+        dest: "/etc/prometheus/prometheus.yml"
+
+    - name: Create Prometheus systemd service
+      ansible.builtin.template:
+        src: "templates/prometheus.service.j2"
+        dest: "/etc/systemd/system/prometheus.service"
+        mode: '0644'
+
+    - name: Reload systemd and enable Prometheus
+      ansible.builtin.systemd:
+        daemon_reload: yes
+        name: prometheus
+        state: started
+        enabled: yes

@@ -8,3 +8,4 @@ terraform-azure.tfstate.backup
 terraform-aws.tfstate
 terraform-aws.tfstate.backup
 .terraform.lock.hcl
+tf-debug.log

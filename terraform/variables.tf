@@ -10,8 +10,11 @@ variable "region" {
 }
 
 variable "ssh_key" {
-  description = "Pfad zum Public SSH Key"
-  type        = string
+  type = string
+}
+
+variable "ssh_key_path" {
+  type = string
 }
 
 variable "vm_count" {

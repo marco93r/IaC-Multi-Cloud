@@ -8,7 +8,7 @@ users:
     shell: /bin/bash
     sudo: ['ALL=(ALL) NOPASSWD:ALL']
     ssh-authorized-keys:
-      - ${ssh_key}
+      - ${file("~/.ssh/id_rsa_aws.pub")}
 
 package_update: true
 package_upgrade: true

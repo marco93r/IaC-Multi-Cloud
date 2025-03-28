@@ -1,13 +1,12 @@
-resource "aws_key_pair" "this" {
-  key_name   = "${var.role}-key"
-  public_key = file(var.ssh_key)
+locals {
+  aws_device_letters = ["f", "g", "h", "i", "j", "k", "l", "m", "n", "o"]
 }
 
 resource "aws_instance" "vm" {
   count         = var.vm_count
   ami           = "ami-03250b0e01c28d196"
   instance_type = var.instance_type
-  key_name      = aws_key_pair.this.key_name
+  key_name      = var.ssh_key
   subnet_id     = var.subnet_id
   vpc_security_group_ids = [var.security_group_id]
 
@@ -18,7 +17,7 @@ resource "aws_instance" "vm" {
   }
 
   user_data = templatefile("${path.module}/cloud-init.yaml", {
-    ssh_key = file(var.ssh_key)
+    ssh_key = var.ssh_key
     role    = var.role
   })
 }
@@ -35,7 +34,9 @@ resource "aws_ebs_volume" "disk" {
 
 resource "aws_volume_attachment" "attach" {
   count       = length(var.extra_disks)
-  device_name = "/dev/sd${chr(98 + count.index)}" # sdb, sdc, ...
+  device_name = "/dev/sd${local.aws_device_letters[count.index]}"
   volume_id   = aws_ebs_volume.disk[count.index].id
   instance_id = aws_instance.vm[0].id
+
+  depends_on = [ aws_instance.vm, aws_ebs_volume.disk ]
 }
