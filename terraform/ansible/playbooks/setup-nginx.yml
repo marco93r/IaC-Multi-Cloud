@@ -1,0 +1,54 @@
+- name: Setup NGINX Reverse Proxy with SSL for WordPress
+  hosts: localhost
+  become: yes
+  vars:
+    domain_name: "wordpress.example.com"    
+    email: "you@example.com"                 
+    wordpress_port: 30080
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - nginx
+          - python3-certbot-nginx
+        state: present
+
+    - name: Configure NGINX for WordPress
+      template:
+        src: "nginx_wordpress.conf.j2"
+        dest: "/etc/nginx/sites-available/{{ domain_name }}"
+      notify: Reload nginx
+
+    - name: Enable NGINX config
+      file:
+        src: "/etc/nginx/sites-available/{{ domain_name }}"
+        dest: "/etc/nginx/sites-enabled/{{ domain_name }}"
+        state: link
+        force: true
+      notify: Reload nginx
+
+    - name: Remove default NGINX config if exists
+      file:
+        path: "/etc/nginx/sites-enabled/default"
+        state: absent
+      notify: Reload nginx
+
+    - name: Obtain Let's Encrypt SSL certificate
+      command: >
+        certbot --nginx
+        -d {{ domain_name }}
+        --non-interactive
+        --agree-tos
+        -m {{ email }}
+      notify: Reload nginx
+
+  handlers:
+    - name: Reload nginx
+      systemd:
+        name: nginx
+        state: reloaded

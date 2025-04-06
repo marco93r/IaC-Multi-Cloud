@@ -1,0 +1,15 @@
+- name: Configure k8s worker
+  hosts: k8s_workers
+  become: yes
+  tasks:
+    - name: Change ownership of kube config file
+      ansible.builtin.file:
+        path: /home/adminuser/.kube/config
+        owner: "adminuser"
+        group: "adminuser"
+        mode: '0600'
+    
+    - name: Install NFS Client on worker nodes
+      ansible.builtin.apt:
+        name: nfs-common
+        state: present

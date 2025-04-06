@@ -22,10 +22,6 @@ variable "ssh_key" {
   type = string
 }
 
-# variable "network_id" {
-#   type = string
-# }
-
 variable "extra_disks" {
   type = list(object({
     name = string

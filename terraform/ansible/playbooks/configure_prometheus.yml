@@ -1,0 +1,41 @@
+- name: Install Node Exporter
+  hosts: all
+  become: yes
+  tasks:
+    - name: Erstelle den Benutzer für Node Exporter
+      ansible.builtin.user:
+        name: node_exporter
+        system: yes
+        shell: /sbin/nologin
+        create_home: no
+
+    - name: Download Node Exporter
+      ansible.builtin.get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz"
+        dest: "/tmp/node_exporter.tar.gz"
+        mode: '0644'
+
+    - name: Extract Node Exporter
+      ansible.builtin.unarchive:
+        src: "/tmp/node_exporter.tar.gz"
+        dest: "/tmp"
+        remote_src: yes
+
+    - name: Move Node Exporter binary
+      ansible.builtin.copy:
+        src: "/tmp/node_exporter-1.3.1.linux-amd64/node_exporter"
+        dest: "/usr/local/bin/node_exporter"
+        mode: '0755'
+        remote_src: yes
+
+    - name: Create systemd service for Node Exporter
+      ansible.builtin.template:
+        src: "templates/node_exporter.service.j2"
+        dest: "/etc/systemd/system/node_exporter.service"
+        mode: '0644'
+
+    - name: Enable and start Node Exporter
+      ansible.builtin.systemd:
+        name: node_exporter
+        state: started
+        enabled: yes

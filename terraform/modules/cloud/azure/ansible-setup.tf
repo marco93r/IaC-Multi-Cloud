@@ -25,6 +25,7 @@ resource "null_resource" "upload_ssh_key" {
 resource "null_resource" "prepare_management_server" {
   provisioner "remote-exec" {
     inline = [ 
+      "while sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1; do echo 'Waiting for apt lock...'; sleep 5; done",
       "sudo apt-get update",
       "sudo apt-get install -y ansible",
       "rm -rf /home/adminuser/playbooks",
@@ -50,6 +51,7 @@ resource "local_file" "inventory" {
     persistent_storage_ip = module.storage_server.vm_ips
     monitoring_logging_ip = module.monitoring_server.vm_ips
     ssh_key_path = pathexpand(var.ssh_key_path)
+    cloud_provider = var.cloud_provider
   })
 
   depends_on = [module.management_server, module.k8s_master, module.k8s_worker, module.storage_server, module.monitoring_server, null_resource.prepare_management_server]
@@ -96,13 +98,13 @@ resource "null_resource" "run_ansible" {
       "export ANSIBLE_HOST_KEY_CHECKING=False",
       "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/setup_persistent_storage_${var.cloud_provider}.yml",
       "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/setup_grafana_prometheus.yml",
-      # "ANSIBLE_SSH_ARGS='-o StrictHostKeyChecking=no' ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_prometheus.yml",
-      # "ANSIBLE_SSH_ARGS='-o StrictHostKeyChecking=no' ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_grafana.yml",
-      # "ANSIBLE_SSH_ARGS='-o StrictHostKeyChecking=no' ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_k8s-cluster.yml",
-      # "ANSIBLE_SSH_ARGS='-o StrictHostKeyChecking=no' ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_k8s-master.yml",
-      # "ANSIBLE_SSH_ARGS='-o StrictHostKeyChecking=no' ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_k8s-worker.yml",
-      # "ANSIBLE_SSH_ARGS='-o StrictHostKeyChecking=no' ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/provision_persistent-storage-k8s.yml",
-      # "ANSIBLE_SSH_ARGS='-o StrictHostKeyChecking=no' ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/provision_wordpress.yml"
+      "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_prometheus.yml",
+      "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_grafana.yml",
+      "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_k8s-cluster.yml",
+      "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_k8s-master.yml",
+      "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/configure_k8s-worker.yml",
+      "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/provision_persistent-storage-k8s.yml",
+      "ansible-playbook -i /home/adminuser/inventory.ini /home/adminuser/playbooks/provision_wordpress.yml"
     ]
   }
 

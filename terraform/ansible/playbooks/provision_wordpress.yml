@@ -1,0 +1,18 @@
+- name: Deploy Wordpress
+  hosts: k8s_masters
+  become: no
+  tasks:
+
+    - name: Add Bitname Helm Repo
+      ansible.builtin.command:
+        cmd: helm repo add bitnami https://charts.bitnami.com/bitnami
+      changed_when: false
+
+    - name: Update Helm Repos
+      ansible.builtin.command:
+        cmd: helm repo update
+      changed_when: false
+
+    - name: Deploy Wordpress with Helm
+      ansible.builtin.command:
+        cmd: "helm install wordpress bitnami/wordpress --set global.storageClass=manual --set persistence.enabled=true --set persistence.existingClaim=wordpress --set mariadb.persistence.enabled=true --set mariadb.persistence.existingClaim=data-wordpress-mariadb-0 --set service.type=NodePort --set service.nodePorts.http=30080 --set wordpressUsername=admin"

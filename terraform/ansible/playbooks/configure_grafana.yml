@@ -1,0 +1,139 @@
+- name: Configure Grafana
+  hosts: monitoring_logging
+  become: yes
+  tasks:
+    - name: Erstelle Service Account für Grafana (falls nicht vorhanden)
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/serviceaccounts"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Basic {{ 'admin:admin' | b64encode }}"
+        body_format: json
+        body:
+          name: "ansible_provisioning"
+          role: "Admin"
+        status_code: [200, 201, 409]
+      register: grafana_service_account
+
+    - name: Extrahiere Service Account ID
+      set_fact:
+        service_account_id: "{{ grafana_service_account.json.id | default('1') }}"
+
+    - name: Erstelle API-Token für Service Account
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/serviceaccounts/{{ service_account_id }}/tokens"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Basic {{ 'admin:admin' | b64encode }}"
+        body_format: json
+        body:
+          name: "ansible_token"
+        status_code: [200, 201]
+      register: grafana_api_token_response
+
+    - name: Speichere API-Token für spätere Nutzung
+      set_fact:
+        grafana_api_token: "{{ grafana_api_token_response.json.key }}"
+
+    - name: Debug API-Token
+      ansible.builtin.debug:
+        var: grafana_api_token
+
+    - name: Füge Prometheus als Datasource in Grafana hinzu
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/datasources"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Bearer {{ grafana_api_token }}"
+        body_format: json
+        body:
+          name: "Prometheus"
+          type: "prometheus"
+          url: "http://localhost:9090"
+          access: "proxy"
+          basicAuth: false
+        status_code: [200, 409]
+
+    - name: Erstelle ein neues Dashboard
+      ansible.builtin.uri:
+        url: "http://localhost:3000/api/dashboards/db"
+        method: POST
+        headers:
+          Content-Type: "application/json"
+          Authorization: "Bearer {{ grafana_api_token }}"
+        body_format: json
+        body:
+          dashboard:
+            id: null
+            uid: "hetzner-monitoring"
+            title: "VM Monitoring"
+            timezone: "browser"
+            schemaVersion: 16
+            version: 0
+            panels:
+              - title: "CPU Usage"
+                type: "timeseries"
+                targets:
+                  - expr: "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode='idle'}[5m])) * 100)"
+                    legendFormat: "{{ '{{instance}}' }}"
+                    datasource: "Prometheus"
+                gridPos:
+                  x: 0
+                  y: 0
+                  w: 12
+                  h: 6
+                fieldConfig:
+                  defaults:
+                    unit: "percent"
+                    thresholds:
+                      mode: "absolute"
+                      steps:
+                        - color: "green"
+                          value: null
+                        - color: "yellow"
+                          value: 60
+                        - color: "red"
+                          value: 90
+                    custom:
+                      drawStyle: "line"
+                      lineWidth: 2
+                      fillOpacity: 10
+
+              - title: "Memory Usage"
+                type: "timeseries"
+                targets:
+                  - expr: "avg by(instance) (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100)"
+                    legendFormat: "{{ '{{instance}}' }}"
+                    datasource: "Prometheus"
+                gridPos:
+                  x: 12
+                  y: 0
+                  w: 12
+                  h: 6
+                fieldConfig:
+                  defaults:
+                    unit: "percent"
+                    thresholds:
+                      mode: "absolute"
+                      steps:
+                        - color: "green"
+                          value: null
+                        - color: "yellow"
+                          value: 60
+                        - color: "red"
+                          value: 90
+                    custom:
+                      drawStyle: "line"
+                      lineWidth: 2
+                      fillOpacity: 10
+
+            templating:
+              list: []
+            time:
+              from: "now-5m"
+              to: "now"
+          overwrite: true
+        status_code: [200, 409] 

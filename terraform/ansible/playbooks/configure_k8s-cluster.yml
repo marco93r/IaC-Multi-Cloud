@@ -1,0 +1,158 @@
+- name: Configure Kubernetes-Cluster
+  hosts: k8s_masters, k8s_workers
+  become: yes
+  tasks:
+
+    - name: Update & Upgrade APT
+      ansible.builtin.apt:
+        update_cache: yes
+        upgrade: full
+
+    - name: Install necessary utilities
+      ansible.builtin.apt:
+        name:
+          - systemd-timesyncd
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gpg
+          - gnupg2
+          - software-properties-common
+        state: present
+
+    - name: Enable time-sync
+      ansible.builtin.command:
+        cmd: timedatectl set-ntp true
+
+    - name: Disable swap
+      ansible.builtin.command:
+        cmd: swapoff -a
+      changed_when: false
+
+    - name: Comment out swap entry in fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(.*\sswap\s.*)$'
+        replace: '#\1'
+
+    - name: Load required kernel modules
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+        mode: '0644'
+
+    - name: Ensure kernel modules are loaded
+      ansible.builtin.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Configure network parameters
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/k8s.conf
+        content: |
+          net.bridge.bridge-nf-call-ip6tables = 1
+          net.bridge.bridge-nf-call-iptables = 1
+          net.ipv4.ip_forward = 1
+        mode: '0644'
+
+    - name: Apply sysctl settings
+      ansible.builtin.command:
+        cmd: sysctl --system
+      changed_when: false
+
+    - name: Create directory for Kubernetes repo keys
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Kubernetes repository key
+      ansible.builtin.shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+        echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+    - name: Update APT cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Kubernetes tools
+      ansible.builtin.apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+
+    - name: Hold Kubernetes packages
+      ansible.builtin.dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Add containerd repo
+      ansible.builtin.shell: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        sudo chmod a+r /etc/apt/keyrings/docker.gpg
+        echo "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    - name: Update APT cache
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install container runtime
+      ansible.builtin.apt:
+        name: containerd.io
+        state: present
+
+    - name: Ensure containerd config directory exists
+      ansible.builtin.file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Import containerd default config
+      ansible.builtin.template:
+        src: templates/config.toml
+        dest: /etc/containerd/config.toml
+
+    - name: Restart containerd service
+      ansible.builtin.systemd_service:
+        name: containerd
+        state: restarted
+        enabled: true
+
+    - name: Create crictl config file
+      ansible.builtin.copy:
+        dest: /etc/crictl.yaml
+        content: |
+          runtime-endpoint: unix:///run/containerd/containerd.sock
+          image-endpoint: unix:///run/containerd/containerd.sock
+          timeout: 2
+          debug: false
+          pull-image-on-create: false
+        mode: '0644'
+
+    - name: Ensure kubelet service is enabled
+      ansible.builtin.systemd_service:
+        name: kubelet
+        enabled: true
+        state: started
+
+    - name: Restart kubelet service
+      ansible.builtin.systemd_service:
+        name: kubelet
+        state: restarted
+
+    - name: Create .kube directory
+      ansible.builtin.file:
+        path: /home/adminuser/.kube
+        state: directory
+        mode: '0755'

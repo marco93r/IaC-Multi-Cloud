@@ -20,6 +20,27 @@ resource "hcloud_firewall" "default" {
     source_ips = ["0.0.0.0/0"]
   }
 
+  rule {
+    direction = "in"
+    protocol  = "tcp"
+    port      = "3000"
+    source_ips = ["0.0.0.0/0"]
+  }
+
+  rule {
+    direction = "in"
+    protocol  = "tcp"
+    port      = "9090"
+    source_ips = ["0.0.0.0/0"]
+  }
+
+  rule {
+    direction = "in"
+    protocol  = "tcp"
+    port      = "9001"
+    source_ips = ["0.0.0.0/0"]
+  }
+
   apply_to {
     label_selector = "role"
   }

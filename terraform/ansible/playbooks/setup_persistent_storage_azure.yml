@@ -110,17 +110,3 @@
       ansible.builtin.systemd:
         name: nfs-server
         state: restarted
-
-    # - name: Set permissions on /mnt/disk1
-    #   ansible.builtin.shell: |
-    #     sudo chown -R 1001:1001 /mnt/disk1
-    #     sudo chmod -R 775 /mnt/disk1
-    #     sudo chown -R 1001:1001 /mnt/disk2
-    #     sudo chmod -R 775 /mnt/disk2
-    #   become: yes
-
-    # - name: Set permissions on /mnt/disk2
-    #   ansible.builtin.shell: |
-    #     sudo chown -R 1001:1001 /mnt/disk2
-    #     sudo chmod -R 775 /mnt/disk2
-    #   become: yes

@@ -1,0 +1,26 @@
+[Unit]
+Description=Node Exporter
+After=network.target
+
+[Service]
+User=node_exporter
+Group=node_exporter
+Type=simple
+ExecStart=/usr/local/bin/node_exporter \
+  --collector.cpu \
+  --collector.diskstats \
+  --collector.filesystem \
+  --collector.loadavg \
+  --collector.meminfo \
+  --collector.netdev \
+  --collector.stat \
+  --collector.systemd \
+  --collector.uname \
+  --collector.vmstat \
+  --collector.time \
+  --collector.hwmon \
+  --collector.processes
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

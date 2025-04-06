@@ -11,7 +11,7 @@ tfvars = {
     "region": {
         cloud_provider: env["region"][cloud_provider]
     },
-    "ssh_key": env["ssh_key"][cloud_provider],  # ← als String (nicht geschachtelt!)
+    "ssh_key": env["ssh_key"][cloud_provider],
     "ssh_key_path": env["ssh_key_path"][cloud_provider],
     "vm_count": {
         cloud_provider: env["vm_count"][cloud_provider]

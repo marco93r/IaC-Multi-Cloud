@@ -1,0 +1,39 @@
+- name: Provision Persistent Storage on Kubernetes
+  hosts: k8s_masters
+  become: no
+  tasks:
+
+    - name: Create k8s-files directory
+      ansible.builtin.file:
+        path: /home/adminuser/k8s-files
+        state: directory
+        mode: '0755'
+      become: no
+
+    - name: Copy pv.yaml to k8s-master
+      ansible.builtin.copy:
+        src: /home/adminuser/pv.yaml
+        dest: /home/adminuser/k8s-files/pv.yaml
+        owner: adminuser
+        group: adminuser
+        mode: '0644'
+      become: no
+
+    - name: Provision pv.yaml
+      ansible.builtin.command:
+        cmd: kubectl apply -f /home/adminuser/k8s-files/pv.yaml
+      become: no
+
+    - name: Copy pvc.yaml to k8s-master
+      ansible.builtin.copy:
+        src: /home/adminuser/playbooks/templates/k8s-files/pvc.yaml
+        dest: /home/adminuser/k8s-files/pvc.yaml
+        owner: adminuser
+        group: adminuser
+        mode: '0644'
+      become: no
+
+    - name: Provision pvc.yaml
+      ansible.builtin.command:
+        cmd: kubectl apply -f /home/adminuser/k8s-files/pvc.yaml
+      become: no
