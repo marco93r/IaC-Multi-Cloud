@@ -1,5 +1,5 @@
 resource "local_file" "persistent_volume_yaml" {
-  content = templatefile("${path.root}/ansible/pv.tpl", {
+  content = templatefile("${path.root}/ansible/pv.tftpl", {
     nfs_server_disk1 = module.storage_server.vm_ips[0]
     nfs_server_disk2 = module.storage_server.vm_ips[0]
   })

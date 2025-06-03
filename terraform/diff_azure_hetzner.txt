@@ -1,0 +1,306 @@
+Only in modules/hetzner/compute: cloud-init.yaml
+diff -ru modules/azure/compute/main.tf modules/hetzner/compute/main.tf
+--- modules/azure/compute/main.tf	2025-03-22 20:59:12.679497800 +0100
++++ modules/hetzner/compute/main.tf	2025-03-22 18:04:26.298615800 +0100
+@@ -1,75 +1,40 @@
+-resource "azurerm_public_ip" "pip" {
+-  count               = var.vm_count
+-  name                = "${var.role}-pip-${count.index}"
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-  allocation_method   = "Dynamic"
+-}
+-
+-resource "azurerm_network_interface" "nic" {
+-  count               = var.vm_count
+-  name                = "${var.role}-nic-${count.index}"
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-
+-  ip_configuration {
+-    name                          = "internal"
+-    subnet_id                     = var.subnet_id
+-    private_ip_address_allocation = "Dynamic"
+-    public_ip_address_id          = azurerm_public_ip.pip[count.index].id
+-  }
+-}
+-
+-resource "azurerm_network_interface_security_group_association" "nsg" {
+-  count                     = var.vm_count
+-  network_interface_id      = azurerm_network_interface.nic[count.index].id
+-  network_security_group_id = var.nsg_id
+-}
+-
+-resource "azurerm_linux_virtual_machine" "vm" {
+-  count               = var.vm_count
+-  name                = replace("${var.role}-${count.index}", "_", "-")
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-  size                = var.instance_type
+-  admin_username      = "adminuser"
+-
+-  network_interface_ids = [azurerm_network_interface.nic[count.index].id]
+-
+-  admin_ssh_key {
+-    username   = "adminuser"
+-    public_key = file(var.ssh_key)
++# data "hcloud_ssh_key" "default" {
++#   name = var.hcloud_ssh_key_name
++# }
++
++resource "hcloud_server" "vm" {
++  count       = var.vm_count
++  name = replace("${var.role}-${count.index}", "_", "-")
++  server_type = var.instance_type
++  image       = "ubuntu-24.04"
++  location    = var.region
++  ssh_keys    = [var.ssh_key]
++  firewall_ids = [var.firewall_id]
++  user_data   = templatefile("${path.module}/cloud-init.yaml", {
++    ssh_key = var.ssh_key
++  })
++
++  public_net {
++    ipv4_enabled = true
++    ipv6_enabled = false
+   }
+ 
+-  disable_password_authentication = true
+-  source_image_reference {
+-    publisher = "Canonical"
+-    offer     = "0001-com-ubuntu-server-jammy"
+-    sku       = "22_04-lts-gen2"
+-    version   = "latest"
+-  }
+-
+-  os_disk {
+-    name              = "${var.role}-osdisk-${count.index}"
+-    caching           = "ReadWrite"
+-    storage_account_type = "Standard_LRS"
++  network {
++    network_id = var.network_id
+   }
+ }
+ 
+-resource "azurerm_managed_disk" "disk" {
+-  count               = length(var.extra_disks)
+-  name                = "${var.role}-disk-${count.index}"
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-  storage_account_type = var.extra_disks[count.index].type
+-  create_option       = "Empty"
+-  disk_size_gb        = var.extra_disks[count.index].size
++resource "hcloud_volume" "disk" {
++  count    = length(var.extra_disks)
++  name     = "${var.role}-disk-${count.index}"
++  size     = var.extra_disks[count.index].size
++  location = var.region
+ }
+ 
+-resource "azurerm_virtual_machine_data_disk_attachment" "attach" {
+-  count              = length(var.extra_disks)
+-  managed_disk_id    = azurerm_managed_disk.disk[count.index].id
+-  virtual_machine_id = azurerm_linux_virtual_machine.vm[0].id
+-  lun                = count.index
+-  caching            = "ReadWrite"
++
++resource "hcloud_volume_attachment" "attach" {
++  count     = length(var.extra_disks)
++  volume_id = hcloud_volume.disk[count.index].id
++  server_id = hcloud_server.vm[0].id
++  automount = false
+ }
+diff -ru modules/azure/compute/outputs.tf modules/hetzner/compute/outputs.tf
+--- modules/azure/compute/outputs.tf	2025-03-22 20:59:31.029962900 +0100
++++ modules/hetzner/compute/outputs.tf	2025-03-22 16:13:18.013860900 +0100
+@@ -1,7 +1,3 @@
+ output "vm_ips" {
+-  value = azurerm_linux_virtual_machine.vm[*].public_ip_address
+-}
+-
+-output "public_ips" {
+-  value = azurerm_public_ip.pip[*].ip_address
++  value = hcloud_server.vm[*].ipv4_address
+ }
+diff -ru modules/azure/compute/variables.tf modules/hetzner/compute/variables.tf
+--- modules/azure/compute/variables.tf	2025-03-30 19:31:28.963427800 +0200
++++ modules/hetzner/compute/variables.tf	2025-03-22 17:49:05.524433500 +0100
+@@ -22,6 +22,10 @@
+   type = string
+ }
+ 
++variable "network_id" {
++  type = string
++}
++
+ variable "extra_disks" {
+   type = list(object({
+     name = string
+@@ -31,14 +35,7 @@
+   default = []
+ }
+ 
+-variable "subnet_id" {
+-  type = string
+-}
+-
+-variable "resource_group_name" {
++variable "firewall_id" {
+   type = string
+ }
+ 
+-variable "nsg_id" {
+-  type = string
+-}
+diff -ru modules/azure/network/main.tf modules/hetzner/network/main.tf
+--- modules/azure/network/main.tf	2025-03-28 16:51:40.963652100 +0100
++++ modules/hetzner/network/main.tf	2025-03-28 16:52:42.064810800 +0100
+@@ -1,79 +1,47 @@
+-resource "azurerm_resource_group" "rg" {
+-  name     = "rg-multicloud"
+-  location = var.region
++resource "hcloud_network" "net" {
++  name     = "hetzner-net"
++  ip_range = "10.0.0.0/16"
+ }
+ 
+-resource "azurerm_virtual_network" "vnet" {
+-  name                = "vnet-multicloud"
+-  address_space       = ["10.0.0.0/16"]
+-  location            = var.region
+-  resource_group_name = azurerm_resource_group.rg.name
++resource "hcloud_network_subnet" "subnet" {
++  network_id   = hcloud_network.net.id
++  type         = "cloud"
++  network_zone = "eu-central"
++  ip_range     = "10.0.0.0/24"
+ }
+ 
+-resource "azurerm_subnet" "subnet" {
+-  name                 = "subnet-multicloud"
+-  resource_group_name  = azurerm_resource_group.rg.name
+-  virtual_network_name = azurerm_virtual_network.vnet.name
+-  address_prefixes     = ["10.0.0.0/24"]
+-}
++resource "hcloud_firewall" "default" {
++  name = "allow-ssh"
+ 
+-resource "azurerm_network_security_group" "nsg" {
+-  name                = "nsg-multicloud"
+-  location            = var.region
+-  resource_group_name = azurerm_resource_group.rg.name
+-
+-  security_rule {
+-    name                       = "Allow-SSH"
+-    priority                   = 1001
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "22"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "22"
++    source_ips = ["0.0.0.0/0"]
+   }
+ 
+-  security_rule {
+-    name                       = "Allow-Node-Exporter"
+-    priority                   = 1002
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "9001"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "3000"
++    source_ips = ["0.0.0.0/0"]
+   }
+ 
+-  security_rule {
+-    name                       = "Allow-Grafana"
+-    priority                   = 1003
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "3000"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "9090"
++    source_ips = ["0.0.0.0/0"]
+   }
+ 
+-  security_rule {
+-    name                       = "Allow-Prometheus"
+-    priority                   = 1001
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "9090"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "9001"
++    source_ips = ["0.0.0.0/0"]
+   }
+-}
+ 
+-resource "azurerm_public_ip" "pip" {
+-  name                = "pip-multicloud"
+-  location            = var.region
+-  resource_group_name = azurerm_resource_group.rg.name
+-  allocation_method   = "Dynamic"
+-}
++  apply_to {
++    label_selector = "role"
++  }
++}
+\ No newline at end of file
+diff -ru modules/azure/network/outputs.tf modules/hetzner/network/outputs.tf
+--- modules/azure/network/outputs.tf	2025-03-22 18:24:55.545122200 +0100
++++ modules/hetzner/network/outputs.tf	2025-03-22 17:47:22.355674100 +0100
+@@ -1,15 +1,7 @@
+-output "resource_group_name" {
+-  value = azurerm_resource_group.rg.name
++output "network_id" {
++  value = hcloud_network.net.id
+ }
+ 
+-output "subnet_id" {
+-  value = azurerm_subnet.subnet.id
+-}
+-
+-output "nsg_id" {
+-  value = azurerm_network_security_group.nsg.id
+-}
+-
+-output "public_ip_id" {
+-  value = azurerm_public_ip.pip.id
++output "firewall_id" {
++  value = hcloud_firewall.default.id
+ }
+diff -ru modules/azure/network/variables.tf modules/hetzner/network/variables.tf
+--- modules/azure/network/variables.tf	2025-03-22 18:20:36.061272100 +0100
++++ modules/hetzner/network/variables.tf	2025-03-22 16:21:09.611807300 +0100
+@@ -1,6 +1,7 @@
+ variable "cloud_provider" {
+   type = string
+ }
++
+ variable "region" {
+   type = string
+ }

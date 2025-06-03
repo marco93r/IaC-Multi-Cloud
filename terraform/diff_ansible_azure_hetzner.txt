@@ -1,0 +1,47 @@
+--- ansible/playbooks/setup_persistent_storage_azure.yml	2025-03-30 19:30:29.668509600 +0200
++++ ansible/playbooks/setup_persistent_storage_hetzner.yml	2025-03-06 15:18:20.376293500 +0100
+@@ -34,13 +34,13 @@
+             owner: '1001'
+             group: '1001'
+ 
+-        - name: Format /dev/sdc
++        - name: Format /dev/sdb
+           ansible.builtin.command:
+-            cmd: mkfs.ext4 /dev/sdc
++            cmd: mkfs.ext4 /dev/sdb
+ 
+-        - name: Format /dev/sdd
++        - name: Format /dev/sdc
+           ansible.builtin.command:
+-            cmd: mkfs.ext4 /dev/sdd
++            cmd: mkfs.ext4 /dev/sdc
+ 
+         - name: Add disks to fstab for persistence
+           ansible.builtin.lineinfile:
+@@ -48,20 +48,20 @@
+             line: "{{ item }}"
+             state: present
+           loop:
+-            - "/dev/sdc /mnt/disk1 ext4 defaults 0 2"
+-            - "/dev/sdd /mnt/disk2 ext4 defaults 0 2"
++            - "/dev/sdb /mnt/disk1 ext4 defaults 0 2"
++            - "/dev/sdc /mnt/disk2 ext4 defaults 0 2"
+ 
+-        - name: Mount /dev/sdc
++        - name: Mount /dev/sdb
+           ansible.builtin.mount:
+             path: /mnt/disk1
+-            src: /dev/sdc
++            src: /dev/sdb
+             fstype: ext4
+             state: mounted
+ 
+-        - name: Mount /dev/sdd
++        - name: Mount /dev/sdc
+           ansible.builtin.mount:
+             path: /mnt/disk2
+-            src: /dev/sdd
++            src: /dev/sdc
+             fstype: ext4
+             state: mounted
+       when: disk_info is defined

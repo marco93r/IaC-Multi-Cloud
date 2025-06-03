@@ -1,0 +1,250 @@
+diff -ru modules/cloud/azure/ansible-setup.tf modules/cloud/aws/ansible-setup.tf
+--- modules/cloud/azure/ansible-setup.tf	2025-03-30 11:59:34.366287600 +0200
++++ modules/cloud/aws/ansible-setup.tf	2025-03-30 19:31:42.278961100 +0200
+@@ -1,21 +1,21 @@
+ # Upload SSH-Key auf den Management-Server
+ resource "null_resource" "upload_ssh_key" {
+   provisioner "file" {
+-    source      = "~/.ssh/id_rsa"
+-    destination = "/home/adminuser/.ssh/id_rsa"
++    source      = "~/.ssh/id_rsa_aws"
++    destination = "/home/adminuser/.ssh/id_rsa_aws"
+   }
+ 
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_rsa_aws")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+   provisioner "remote-exec" {
+     inline = [
+-      "chmod 600 /home/adminuser/.ssh/id_rsa",
+-      "chown adminuser:adminuser /home/adminuser/.ssh/id_rsa"
++      "chmod 600 /home/adminuser/.ssh/id_rsa_aws",
++      "chown adminuser:adminuser /home/adminuser/.ssh/id_rsa_aws"
+     ]
+   }
+ 
+@@ -35,7 +35,7 @@
+      connection {
+        type = "ssh"
+        user = "adminuser"
+-       private_key = file("~/.ssh/id_rsa")
++       private_key = file("~/.ssh/id_rsa_aws")
+        host = module.management_server.vm_ips[0]
+      }
+   }
+@@ -67,7 +67,7 @@
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_rsa_aws")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+@@ -84,7 +84,7 @@
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_rsa_aws")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+@@ -111,7 +111,7 @@
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_rsa_aws")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+diff -ru modules/cloud/azure/main.tf modules/cloud/aws/main.tf
+--- modules/cloud/azure/main.tf	2025-03-22 20:15:36.422790100 +0100
++++ modules/cloud/aws/main.tf	2025-03-26 15:52:29.832763300 +0100
+@@ -1,75 +1,75 @@
+ module "network" {
+-  source         = "../../azure/network"
++  source         = "../../aws/network"
+   cloud_provider = var.cloud_provider
+   region         = var.region
+ }
+ 
+ module "management_server" {
+-  source              = "../../azure/compute"
+-  role                = "management"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["management"]
+-  vm_count            = var.vm_count["management"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = var.extra_disks
++  source           = "../../aws/compute"
++  role             = "management"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["management"]
++  vm_count         = var.vm_count["management"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  vpc_id           = module.network.vpc_id
++  subnet_id        = module.network.subnet_id
++  security_group_id = module.network.security_group_id
++  extra_disks      = []
+ }
+ 
+ module "k8s_master" {
+-  source              = "../../azure/compute"
+-  role                = "k8s-master"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["k8s_master"]
+-  vm_count            = var.vm_count["k8s_master"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = []
++  source           = "../../aws/compute"
++  role             = "k8s-master"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["k8s_master"]
++  vm_count         = var.vm_count["k8s_master"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  vpc_id           = module.network.vpc_id
++  subnet_id        = module.network.subnet_id
++  security_group_id = module.network.security_group_id
++  extra_disks      = []
+ }
+ 
+ module "k8s_worker" {
+-  source              = "../../azure/compute"
+-  role                = "k8s-worker"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["k8s_worker"]
+-  vm_count            = var.vm_count["k8s_worker"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = []
++  source           = "../../aws/compute"
++  role             = "k8s-worker"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["k8s_worker"]
++  vm_count         = var.vm_count["k8s_worker"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  vpc_id           = module.network.vpc_id
++  subnet_id        = module.network.subnet_id
++  security_group_id = module.network.security_group_id
++  extra_disks      = []
+ }
+ 
+ module "storage_server" {
+-  source              = "../../azure/compute"
+-  role                = "storage"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["storage"]
+-  vm_count            = var.vm_count["storage"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = var.extra_disks
++  source           = "../../aws/compute"
++  role             = "storage"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["storage"]
++  vm_count         = var.vm_count["storage"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  vpc_id           = module.network.vpc_id
++  subnet_id        = module.network.subnet_id
++  security_group_id = module.network.security_group_id
++  extra_disks      = var.extra_disks
+ }
+ 
+ module "monitoring_server" {
+-  source              = "../../azure/compute"
+-  role                = "monitoring"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["monitoring"]
+-  vm_count            = var.vm_count["monitoring"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = []
+-}
++  source           = "../../aws/compute"
++  role             = "monitoring"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["monitoring"]
++  vm_count         = var.vm_count["monitoring"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  vpc_id           = module.network.vpc_id
++  subnet_id        = module.network.subnet_id
++  security_group_id = module.network.security_group_id
++  extra_disks      = []
++}
+\ No newline at end of file
+diff -ru modules/cloud/azure/pv.tf modules/cloud/aws/pv.tf
+--- modules/cloud/azure/pv.tf	2025-03-30 12:01:10.761050000 +0200
++++ modules/cloud/aws/pv.tf	2025-03-29 17:48:31.212663900 +0100
+@@ -18,7 +18,7 @@
+     connection {
+       type        = "ssh"
+       user        = "adminuser"
+-      private_key = file("~/.ssh/id_rsa")
++      private_key = file("~/.ssh/id_rsa_aws")
+       host        = module.management_server.vm_ips[0]
+     }
+   }
+diff -ru modules/cloud/azure/variables.tf modules/cloud/aws/variables.tf
+--- modules/cloud/azure/variables.tf	2025-03-28 11:33:45.992076200 +0100
++++ modules/cloud/aws/variables.tf	2025-03-28 11:58:48.350338200 +0100
+@@ -3,7 +3,7 @@
+ }
+ 
+ variable "region" {
+-  type = string
++  type = string 
+ }
+ 
+ variable "ssh_key" {
+@@ -15,18 +15,19 @@
+ }
+ 
+ variable "instance_type" {
+-  type = map(string)
++  type = map(string) 
+ }
+ 
+ variable "vm_count" {
+-  type = map(number)
++  type = map(number)  
+ }
+ 
+ variable "extra_disks" {
+-  type = list(object({
++  type = list(object({  
+     name = string
+     size = number
+     type = string
+   }))
+   default = []
+ }
++

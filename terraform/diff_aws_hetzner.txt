@@ -1,0 +1,327 @@
+diff -ru modules/aws/compute/cloud-init.yaml modules/hetzner/compute/cloud-init.yaml
+--- modules/aws/compute/cloud-init.yaml	2025-03-23 13:54:05.852967300 +0100
++++ modules/hetzner/compute/cloud-init.yaml	2025-03-26 17:24:36.857661100 +0100
+@@ -1,17 +1,8 @@
+ #cloud-config
+-hostname: ${role}-aws
+-manage_etc_hosts: true
+-
+ users:
+   - name: adminuser
+     groups: sudo
+     shell: /bin/bash
+     sudo: ['ALL=(ALL) NOPASSWD:ALL']
+     ssh-authorized-keys:
+-      - ${file("~/.ssh/id_rsa_aws.pub")}
+-
+-package_update: true
+-package_upgrade: true
+-packages:
+-  - curl
+-  - unzip
++      - ${file("~/.ssh/id_ed25519.pub")}
+\ No newline at end of file
+diff -ru modules/aws/compute/main.tf modules/hetzner/compute/main.tf
+--- modules/aws/compute/main.tf	2025-03-30 19:31:00.912188900 +0200
++++ modules/hetzner/compute/main.tf	2025-03-22 18:04:26.298615800 +0100
+@@ -1,42 +1,40 @@
+-locals {
+-  aws_device_letters = ["f", "g", "h", "i", "j", "k", "l", "m", "n", "o"]
+-}
+-
+-resource "aws_instance" "vm" {
+-  count         = var.vm_count
+-  ami           = "ami-03250b0e01c28d196"
+-  instance_type = var.instance_type
+-  key_name      = var.ssh_key
+-  subnet_id     = var.subnet_id
+-  vpc_security_group_ids = [var.security_group_id]
+-
+-  associate_public_ip_address = true
++# data "hcloud_ssh_key" "default" {
++#   name = var.hcloud_ssh_key_name
++# }
++
++resource "hcloud_server" "vm" {
++  count       = var.vm_count
++  name = replace("${var.role}-${count.index}", "_", "-")
++  server_type = var.instance_type
++  image       = "ubuntu-24.04"
++  location    = var.region
++  ssh_keys    = [var.ssh_key]
++  firewall_ids = [var.firewall_id]
++  user_data   = templatefile("${path.module}/cloud-init.yaml", {
++    ssh_key = var.ssh_key
++  })
+ 
+-  tags = {
+-    Name = "${var.role}-${count.index}"
++  public_net {
++    ipv4_enabled = true
++    ipv6_enabled = false
+   }
+ 
+-  user_data = templatefile("${path.module}/cloud-init.yaml", {
+-    ssh_key = var.ssh_key
+-    role    = var.role
+-  })
++  network {
++    network_id = var.network_id
++  }
+ }
+ 
+-resource "aws_ebs_volume" "disk" {
+-  count             = length(var.extra_disks)
+-  availability_zone = "${var.region}a"
+-  size              = var.extra_disks[count.index].size
+-  type              = var.extra_disks[count.index].type
+-  tags = {
+-    Name = var.extra_disks[count.index].name
+-  }
++resource "hcloud_volume" "disk" {
++  count    = length(var.extra_disks)
++  name     = "${var.role}-disk-${count.index}"
++  size     = var.extra_disks[count.index].size
++  location = var.region
+ }
+ 
+-resource "aws_volume_attachment" "attach" {
+-  count       = length(var.extra_disks)
+-  device_name = "/dev/sd${local.aws_device_letters[count.index]}"
+-  volume_id   = aws_ebs_volume.disk[count.index].id
+-  instance_id = aws_instance.vm[0].id
+ 
+-  depends_on = [ aws_instance.vm, aws_ebs_volume.disk ]
++resource "hcloud_volume_attachment" "attach" {
++  count     = length(var.extra_disks)
++  volume_id = hcloud_volume.disk[count.index].id
++  server_id = hcloud_server.vm[0].id
++  automount = false
+ }
+diff -ru modules/aws/compute/outputs.tf modules/hetzner/compute/outputs.tf
+--- modules/aws/compute/outputs.tf	2025-03-22 21:33:30.302759400 +0100
++++ modules/hetzner/compute/outputs.tf	2025-03-22 16:13:18.013860900 +0100
+@@ -1,3 +1,3 @@
+ output "vm_ips" {
+-  value = aws_instance.vm[*].public_ip
++  value = hcloud_server.vm[*].ipv4_address
+ }
+diff -ru modules/aws/compute/variables.tf modules/hetzner/compute/variables.tf
+--- modules/aws/compute/variables.tf	2025-03-23 10:48:59.290847600 +0100
++++ modules/hetzner/compute/variables.tf	2025-03-22 17:49:05.524433500 +0100
+@@ -22,15 +22,7 @@
+   type = string
+ }
+ 
+-variable "vpc_id" {
+-  type = string
+-}
+-
+-variable "subnet_id" {
+-  type = string
+-}
+-
+-variable "security_group_id" {
++variable "network_id" {
+   type = string
+ }
+ 
+@@ -42,3 +34,8 @@
+   }))
+   default = []
+ }
++
++variable "firewall_id" {
++  type = string
++}
++
+diff -ru modules/aws/network/main.tf modules/hetzner/network/main.tf
+--- modules/aws/network/main.tf	2025-03-29 14:37:22.423863600 +0100
++++ modules/hetzner/network/main.tf	2025-03-28 16:52:42.064810800 +0100
+@@ -1,133 +1,47 @@
+-resource "aws_vpc" "vpc" {
+-  cidr_block           = "10.0.0.0/16"
+-  enable_dns_support   = true
+-  enable_dns_hostnames = true
+-
+-  tags = {
+-    Name = "multicloud-vpc"
+-  }
++resource "hcloud_network" "net" {
++  name     = "hetzner-net"
++  ip_range = "10.0.0.0/16"
+ }
+ 
+-resource "aws_subnet" "subnet" {
+-  vpc_id                  = aws_vpc.vpc.id
+-  cidr_block              = "10.0.0.0/24"
+-  map_public_ip_on_launch = true
+-  availability_zone       = "${var.region}a"
+-
+-  tags = {
+-    Name = "multicloud-subnet"
+-  }
++resource "hcloud_network_subnet" "subnet" {
++  network_id   = hcloud_network.net.id
++  type         = "cloud"
++  network_zone = "eu-central"
++  ip_range     = "10.0.0.0/24"
+ }
+ 
+-resource "aws_security_group" "sg" {
+-  name        = "multicloud-sg"
+-  description = "Allow SSH inbound"
+-  vpc_id      = aws_vpc.vpc.id
+-
+-  ingress {
+-    from_port   = 22
+-    to_port     = 22
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
+-
+-  ingress {
+-    from_port   = 3000
+-    to_port     = 3000
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
+-
+-  ingress {
+-    from_port   = 9090
+-    to_port     = 9090
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
+-
+-  ingress {
+-    from_port   = 9100
+-    to_port     = 9100
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
+-
+-  ingress {
+-    from_port   = 6443
+-    to_port     = 6443
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
+-
+-  ingress {
+-    from_port   = 2049
+-    to_port     = 2049
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
+-
+-  ingress {
+-    from_port   = 30080
+-    to_port     = 30080
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
+-
+-  ingress {
+-    from_port   = 80
+-    to_port     = 80
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
+-  }
++resource "hcloud_firewall" "default" {
++  name = "allow-ssh"
+ 
+-  ingress {
+-    from_port   = 3306
+-    to_port     = 3306
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "22"
++    source_ips = ["0.0.0.0/0"]
+   }
+ 
+-  ingress {
+-    from_port   = 6783
+-    to_port     = 6783
+-    protocol    = "tcp"
+-    cidr_blocks = ["0.0.0.0/0"]
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "3000"
++    source_ips = ["0.0.0.0/0"]
+   }
+ 
+-  egress {
+-    from_port   = 0
+-    to_port     = 0
+-    protocol    = "-1"
+-    cidr_blocks = ["0.0.0.0/0"]
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "9090"
++    source_ips = ["0.0.0.0/0"]
+   }
+ 
+-  tags = {
+-    Name = "multicloud-sg"
++  rule {
++    direction = "in"
++    protocol  = "tcp"
++    port      = "9001"
++    source_ips = ["0.0.0.0/0"]
+   }
+-}
+-
+-resource "aws_internet_gateway" "igw" {
+-  vpc_id = aws_vpc.vpc.id
+ 
+-  tags = {
+-    Name = "main-igw"
++  apply_to {
++    label_selector = "role"
+   }
+-}
+-
+-resource "aws_route_table" "public_rt" {
+-  vpc_id = aws_vpc.vpc.id
+-
+-  route {
+-    cidr_block = "0.0.0.0/0"
+-    gateway_id = aws_internet_gateway.igw.id
+-  }
+-
+-  tags = {
+-    Name = "public-rt"
+-  }
+-}
+-
+-resource "aws_route_table_association" "public_rt_assoc" {
+-  subnet_id      = aws_subnet.subnet.id
+-  route_table_id = aws_route_table.public_rt.id
+-}
++}
+\ No newline at end of file
+diff -ru modules/aws/network/outputs.tf modules/hetzner/network/outputs.tf
+--- modules/aws/network/outputs.tf	2025-03-22 21:32:19.738914600 +0100
++++ modules/hetzner/network/outputs.tf	2025-03-22 17:47:22.355674100 +0100
+@@ -1,11 +1,7 @@
+-output "vpc_id" {
+-  value = aws_vpc.vpc.id
++output "network_id" {
++  value = hcloud_network.net.id
+ }
+ 
+-output "subnet_id" {
+-  value = aws_subnet.subnet.id
+-}
+-
+-output "security_group_id" {
+-  value = aws_security_group.sg.id
++output "firewall_id" {
++  value = hcloud_firewall.default.id
+ }

@@ -1,0 +1,409 @@
+Only in modules/aws/compute: cloud-init.yaml
+diff -ru modules/azure/compute/main.tf modules/aws/compute/main.tf
+--- modules/azure/compute/main.tf	2025-03-22 20:59:12.679497800 +0100
++++ modules/aws/compute/main.tf	2025-03-30 19:31:00.912188900 +0200
+@@ -1,75 +1,42 @@
+-resource "azurerm_public_ip" "pip" {
+-  count               = var.vm_count
+-  name                = "${var.role}-pip-${count.index}"
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-  allocation_method   = "Dynamic"
++locals {
++  aws_device_letters = ["f", "g", "h", "i", "j", "k", "l", "m", "n", "o"]
+ }
+ 
+-resource "azurerm_network_interface" "nic" {
+-  count               = var.vm_count
+-  name                = "${var.role}-nic-${count.index}"
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-
+-  ip_configuration {
+-    name                          = "internal"
+-    subnet_id                     = var.subnet_id
+-    private_ip_address_allocation = "Dynamic"
+-    public_ip_address_id          = azurerm_public_ip.pip[count.index].id
+-  }
+-}
++resource "aws_instance" "vm" {
++  count         = var.vm_count
++  ami           = "ami-03250b0e01c28d196"
++  instance_type = var.instance_type
++  key_name      = var.ssh_key
++  subnet_id     = var.subnet_id
++  vpc_security_group_ids = [var.security_group_id]
+ 
+-resource "azurerm_network_interface_security_group_association" "nsg" {
+-  count                     = var.vm_count
+-  network_interface_id      = azurerm_network_interface.nic[count.index].id
+-  network_security_group_id = var.nsg_id
+-}
++  associate_public_ip_address = true
+ 
+-resource "azurerm_linux_virtual_machine" "vm" {
+-  count               = var.vm_count
+-  name                = replace("${var.role}-${count.index}", "_", "-")
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-  size                = var.instance_type
+-  admin_username      = "adminuser"
+-
+-  network_interface_ids = [azurerm_network_interface.nic[count.index].id]
+-
+-  admin_ssh_key {
+-    username   = "adminuser"
+-    public_key = file(var.ssh_key)
++  tags = {
++    Name = "${var.role}-${count.index}"
+   }
+ 
+-  disable_password_authentication = true
+-  source_image_reference {
+-    publisher = "Canonical"
+-    offer     = "0001-com-ubuntu-server-jammy"
+-    sku       = "22_04-lts-gen2"
+-    version   = "latest"
+-  }
++  user_data = templatefile("${path.module}/cloud-init.yaml", {
++    ssh_key = var.ssh_key
++    role    = var.role
++  })
++}
+ 
+-  os_disk {
+-    name              = "${var.role}-osdisk-${count.index}"
+-    caching           = "ReadWrite"
+-    storage_account_type = "Standard_LRS"
++resource "aws_ebs_volume" "disk" {
++  count             = length(var.extra_disks)
++  availability_zone = "${var.region}a"
++  size              = var.extra_disks[count.index].size
++  type              = var.extra_disks[count.index].type
++  tags = {
++    Name = var.extra_disks[count.index].name
+   }
+ }
+ 
+-resource "azurerm_managed_disk" "disk" {
+-  count               = length(var.extra_disks)
+-  name                = "${var.role}-disk-${count.index}"
+-  location            = var.region
+-  resource_group_name = var.resource_group_name
+-  storage_account_type = var.extra_disks[count.index].type
+-  create_option       = "Empty"
+-  disk_size_gb        = var.extra_disks[count.index].size
+-}
++resource "aws_volume_attachment" "attach" {
++  count       = length(var.extra_disks)
++  device_name = "/dev/sd${local.aws_device_letters[count.index]}"
++  volume_id   = aws_ebs_volume.disk[count.index].id
++  instance_id = aws_instance.vm[0].id
+ 
+-resource "azurerm_virtual_machine_data_disk_attachment" "attach" {
+-  count              = length(var.extra_disks)
+-  managed_disk_id    = azurerm_managed_disk.disk[count.index].id
+-  virtual_machine_id = azurerm_linux_virtual_machine.vm[0].id
+-  lun                = count.index
+-  caching            = "ReadWrite"
++  depends_on = [ aws_instance.vm, aws_ebs_volume.disk ]
+ }
+diff -ru modules/azure/compute/outputs.tf modules/aws/compute/outputs.tf
+--- modules/azure/compute/outputs.tf	2025-03-22 20:59:31.029962900 +0100
++++ modules/aws/compute/outputs.tf	2025-03-22 21:33:30.302759400 +0100
+@@ -1,7 +1,3 @@
+ output "vm_ips" {
+-  value = azurerm_linux_virtual_machine.vm[*].public_ip_address
+-}
+-
+-output "public_ips" {
+-  value = azurerm_public_ip.pip[*].ip_address
++  value = aws_instance.vm[*].public_ip
+ }
+diff -ru modules/azure/compute/variables.tf modules/aws/compute/variables.tf
+--- modules/azure/compute/variables.tf	2025-03-30 19:31:28.963427800 +0200
++++ modules/aws/compute/variables.tf	2025-03-23 10:48:59.290847600 +0100
+@@ -22,23 +22,23 @@
+   type = string
+ }
+ 
+-variable "extra_disks" {
+-  type = list(object({
+-    name = string
+-    size = number
+-    type = string
+-  }))
+-  default = []
++variable "vpc_id" {
++  type = string
+ }
+ 
+ variable "subnet_id" {
+   type = string
+ }
+ 
+-variable "resource_group_name" {
++variable "security_group_id" {
+   type = string
+ }
+ 
+-variable "nsg_id" {
+-  type = string
++variable "extra_disks" {
++  type = list(object({
++    name = string
++    size = number
++    type = string
++  }))
++  default = []
+ }
+diff -ru modules/azure/network/main.tf modules/aws/network/main.tf
+--- modules/azure/network/main.tf	2025-03-28 16:51:40.963652100 +0100
++++ modules/aws/network/main.tf	2025-03-29 14:37:22.423863600 +0100
+@@ -1,79 +1,133 @@
+-resource "azurerm_resource_group" "rg" {
+-  name     = "rg-multicloud"
+-  location = var.region
+-}
+-
+-resource "azurerm_virtual_network" "vnet" {
+-  name                = "vnet-multicloud"
+-  address_space       = ["10.0.0.0/16"]
+-  location            = var.region
+-  resource_group_name = azurerm_resource_group.rg.name
+-}
+-
+-resource "azurerm_subnet" "subnet" {
+-  name                 = "subnet-multicloud"
+-  resource_group_name  = azurerm_resource_group.rg.name
+-  virtual_network_name = azurerm_virtual_network.vnet.name
+-  address_prefixes     = ["10.0.0.0/24"]
+-}
+-
+-resource "azurerm_network_security_group" "nsg" {
+-  name                = "nsg-multicloud"
+-  location            = var.region
+-  resource_group_name = azurerm_resource_group.rg.name
+-
+-  security_rule {
+-    name                       = "Allow-SSH"
+-    priority                   = 1001
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "22"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
+-  }
+-
+-  security_rule {
+-    name                       = "Allow-Node-Exporter"
+-    priority                   = 1002
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "9001"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
+-  }
+-
+-  security_rule {
+-    name                       = "Allow-Grafana"
+-    priority                   = 1003
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "3000"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
+-  }
+-
+-  security_rule {
+-    name                       = "Allow-Prometheus"
+-    priority                   = 1001
+-    direction                  = "Inbound"
+-    access                     = "Allow"
+-    protocol                   = "Tcp"
+-    source_port_range          = "*"
+-    destination_port_range     = "9090"
+-    source_address_prefix      = "*"
+-    destination_address_prefix = "*"
+-  }
+-}
+-
+-resource "azurerm_public_ip" "pip" {
+-  name                = "pip-multicloud"
+-  location            = var.region
+-  resource_group_name = azurerm_resource_group.rg.name
+-  allocation_method   = "Dynamic"
++resource "aws_vpc" "vpc" {
++  cidr_block           = "10.0.0.0/16"
++  enable_dns_support   = true
++  enable_dns_hostnames = true
++
++  tags = {
++    Name = "multicloud-vpc"
++  }
++}
++
++resource "aws_subnet" "subnet" {
++  vpc_id                  = aws_vpc.vpc.id
++  cidr_block              = "10.0.0.0/24"
++  map_public_ip_on_launch = true
++  availability_zone       = "${var.region}a"
++
++  tags = {
++    Name = "multicloud-subnet"
++  }
++}
++
++resource "aws_security_group" "sg" {
++  name        = "multicloud-sg"
++  description = "Allow SSH inbound"
++  vpc_id      = aws_vpc.vpc.id
++
++  ingress {
++    from_port   = 22
++    to_port     = 22
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 3000
++    to_port     = 3000
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 9090
++    to_port     = 9090
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 9100
++    to_port     = 9100
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 6443
++    to_port     = 6443
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 2049
++    to_port     = 2049
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 30080
++    to_port     = 30080
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 80
++    to_port     = 80
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 3306
++    to_port     = 3306
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  ingress {
++    from_port   = 6783
++    to_port     = 6783
++    protocol    = "tcp"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  egress {
++    from_port   = 0
++    to_port     = 0
++    protocol    = "-1"
++    cidr_blocks = ["0.0.0.0/0"]
++  }
++
++  tags = {
++    Name = "multicloud-sg"
++  }
++}
++
++resource "aws_internet_gateway" "igw" {
++  vpc_id = aws_vpc.vpc.id
++
++  tags = {
++    Name = "main-igw"
++  }
++}
++
++resource "aws_route_table" "public_rt" {
++  vpc_id = aws_vpc.vpc.id
++
++  route {
++    cidr_block = "0.0.0.0/0"
++    gateway_id = aws_internet_gateway.igw.id
++  }
++
++  tags = {
++    Name = "public-rt"
++  }
++}
++
++resource "aws_route_table_association" "public_rt_assoc" {
++  subnet_id      = aws_subnet.subnet.id
++  route_table_id = aws_route_table.public_rt.id
+ }
+diff -ru modules/azure/network/outputs.tf modules/aws/network/outputs.tf
+--- modules/azure/network/outputs.tf	2025-03-22 18:24:55.545122200 +0100
++++ modules/aws/network/outputs.tf	2025-03-22 21:32:19.738914600 +0100
+@@ -1,15 +1,11 @@
+-output "resource_group_name" {
+-  value = azurerm_resource_group.rg.name
++output "vpc_id" {
++  value = aws_vpc.vpc.id
+ }
+ 
+ output "subnet_id" {
+-  value = azurerm_subnet.subnet.id
++  value = aws_subnet.subnet.id
+ }
+ 
+-output "nsg_id" {
+-  value = azurerm_network_security_group.nsg.id
+-}
+-
+-output "public_ip_id" {
+-  value = azurerm_public_ip.pip.id
++output "security_group_id" {
++  value = aws_security_group.sg.id
+ }
+diff -ru modules/azure/network/variables.tf modules/aws/network/variables.tf
+--- modules/azure/network/variables.tf	2025-03-22 18:20:36.061272100 +0100
++++ modules/aws/network/variables.tf	2025-03-22 21:31:37.303801600 +0100
+@@ -1,6 +1,7 @@
+ variable "cloud_provider" {
+   type = string
+ }
++
+ variable "region" {
+   type = string
+ }

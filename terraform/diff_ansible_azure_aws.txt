@@ -1,0 +1,55 @@
+--- ansible/playbooks/setup_persistent_storage_azure.yml	2025-03-30 19:30:29.668509600 +0200
++++ ansible/playbooks/setup_persistent_storage_aws.yml	2025-03-30 11:11:04.565785600 +0200
+@@ -34,13 +34,13 @@
+             owner: '1001'
+             group: '1001'
+ 
+-        - name: Format /dev/sdc
++        - name: Format /dev/xvdf
+           ansible.builtin.command:
+-            cmd: mkfs.ext4 /dev/sdc
++            cmd: mkfs.ext4 /dev/xvdf
+ 
+-        - name: Format /dev/sdd
++        - name: Format /dev/xvdg
+           ansible.builtin.command:
+-            cmd: mkfs.ext4 /dev/sdd
++            cmd: mkfs.ext4 /dev/xvdg
+ 
+         - name: Add disks to fstab for persistence
+           ansible.builtin.lineinfile:
+@@ -48,20 +48,20 @@
+             line: "{{ item }}"
+             state: present
+           loop:
+-            - "/dev/sdc /mnt/disk1 ext4 defaults 0 2"
+-            - "/dev/sdd /mnt/disk2 ext4 defaults 0 2"
++            - "/dev/xvdf /mnt/disk1 ext4 defaults 0 2"
++            - "/dev/xvdg /mnt/disk2 ext4 defaults 0 2"
+ 
+-        - name: Mount /dev/sdc
++        - name: Mount /dev/xvdf
+           ansible.builtin.mount:
+             path: /mnt/disk1
+-            src: /dev/sdc
++            src: /dev/xvdf
+             fstype: ext4
+             state: mounted
+ 
+-        - name: Mount /dev/sdd
++        - name: Mount /dev/xvdg
+           ansible.builtin.mount:
+             path: /mnt/disk2
+-            src: /dev/sdd
++            src: /dev/xvdg
+             fstype: ext4
+             state: mounted
+       when: disk_info is defined
+@@ -89,6 +89,7 @@
+       ansible.builtin.apt:
+         name: nfs-kernel-server
+         state: present
++      become: yes
+ 
+     - name: Add disk1 to /etc/exports
+       ansible.builtin.lineinfile:

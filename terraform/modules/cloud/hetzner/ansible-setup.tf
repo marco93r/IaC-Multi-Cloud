@@ -45,7 +45,7 @@ resource "null_resource" "prepare_management_server" {
 # Generiere Ansible Inventory
 resource "local_file" "inventory" {
   filename = "${path.root}/ansible/inventory.ini"
-  content = templatefile("${path.root}/ansible/inventory.tpl", {
+  content = templatefile("${path.root}/ansible/inventory.tftpl", {
     k8s_master_ip         = module.k8s_master.vm_ips
     k8s_worker_ip         = module.k8s_worker.vm_ips
     persistent_storage_ip = module.storage_server.vm_ips

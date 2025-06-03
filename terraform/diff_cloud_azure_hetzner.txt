@@ -1,0 +1,224 @@
+diff -ru modules/cloud/azure/ansible-setup.tf modules/cloud/hetzner/ansible-setup.tf
+--- modules/cloud/azure/ansible-setup.tf	2025-03-30 11:59:34.366287600 +0200
++++ modules/cloud/hetzner/ansible-setup.tf	2025-03-30 12:00:04.989053000 +0200
+@@ -1,21 +1,21 @@
+ # Upload SSH-Key auf den Management-Server
+ resource "null_resource" "upload_ssh_key" {
+   provisioner "file" {
+-    source      = "~/.ssh/id_rsa"
+-    destination = "/home/adminuser/.ssh/id_rsa"
++    source      = "~/.ssh/id_ed25519"
++    destination = "/home/adminuser/.ssh/id_ed25519"
+   }
+ 
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_ed25519")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+   provisioner "remote-exec" {
+     inline = [
+-      "chmod 600 /home/adminuser/.ssh/id_rsa",
+-      "chown adminuser:adminuser /home/adminuser/.ssh/id_rsa"
++      "chmod 600 /home/adminuser/.ssh/id_ed25519",
++      "chown adminuser:adminuser /home/adminuser/.ssh/id_ed25519"
+     ]
+   }
+ 
+@@ -35,7 +35,7 @@
+      connection {
+        type = "ssh"
+        user = "adminuser"
+-       private_key = file("~/.ssh/id_rsa")
++       private_key = file("~/.ssh/id_ed25519")
+        host = module.management_server.vm_ips[0]
+      }
+   }
+@@ -67,7 +67,7 @@
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_ed25519")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+@@ -84,7 +84,7 @@
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_ed25519")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+@@ -111,7 +111,7 @@
+   connection {
+     type        = "ssh"
+     user        = "adminuser"
+-    private_key = file("~/.ssh/id_rsa")
++    private_key = file("~/.ssh/id_ed25519")
+     host        = module.management_server.vm_ips[0]
+   }
+ 
+diff -ru modules/cloud/azure/main.tf modules/cloud/hetzner/main.tf
+--- modules/cloud/azure/main.tf	2025-03-22 20:15:36.422790100 +0100
++++ modules/cloud/hetzner/main.tf	2025-03-22 20:18:32.920570000 +0100
+@@ -1,75 +1,75 @@
+ module "network" {
+-  source         = "../../azure/network"
++  source         = "../../hetzner/network"
+   cloud_provider = var.cloud_provider
+   region         = var.region
+ }
+ 
+ module "management_server" {
+-  source              = "../../azure/compute"
+-  role                = "management"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["management"]
+-  vm_count            = var.vm_count["management"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = var.extra_disks
++  source           = "../../hetzner/compute"
++  role             = "management"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["management"]
++  vm_count         = var.vm_count["management"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  network_id       = module.network.network_id
++  firewall_id      = module.network.firewall_id
++  extra_disks      = []
++  #hcloud_ssh_key_name = var.hcloud_ssh_key_name
+ }
+ 
+ module "k8s_master" {
+-  source              = "../../azure/compute"
+-  role                = "k8s-master"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["k8s_master"]
+-  vm_count            = var.vm_count["k8s_master"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = []
++  source           = "../../hetzner/compute"
++  role             = "k8s-master"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["k8s_master"]
++  vm_count         = var.vm_count["k8s_master"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  network_id       = module.network.network_id
++  firewall_id      = module.network.firewall_id
++  extra_disks      = []
++  #hcloud_ssh_key_name = var.hcloud_ssh_key_name
+ }
+ 
+ module "k8s_worker" {
+-  source              = "../../azure/compute"
+-  role                = "k8s-worker"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["k8s_worker"]
+-  vm_count            = var.vm_count["k8s_worker"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = []
++  source           = "../../hetzner/compute"
++  role             = "k8s-worker"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["k8s_worker"]
++  vm_count         = var.vm_count["k8s_worker"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  network_id       = module.network.network_id
++  firewall_id      = module.network.firewall_id
++  extra_disks      = []
++  #hcloud_ssh_key_name = var.hcloud_ssh_key_name
+ }
+ 
+ module "storage_server" {
+-  source              = "../../azure/compute"
+-  role                = "storage"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["storage"]
+-  vm_count            = var.vm_count["storage"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = var.extra_disks
++  source           = "../../hetzner/compute"
++  role             = "storage"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["storage"]
++  vm_count         = var.vm_count["storage"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  network_id       = module.network.network_id
++  firewall_id      = module.network.firewall_id
++  extra_disks      = var.extra_disks
++  #hcloud_ssh_key_name = var.hcloud_ssh_key_name
+ }
+ 
+ module "monitoring_server" {
+-  source              = "../../azure/compute"
+-  role                = "monitoring"
+-  cloud_provider      = var.cloud_provider
+-  instance_type       = var.instance_type["monitoring"]
+-  vm_count            = var.vm_count["monitoring"]
+-  region              = var.region
+-  ssh_key             = var.ssh_key
+-  subnet_id           = module.network.subnet_id
+-  resource_group_name = module.network.resource_group_name
+-  nsg_id              = module.network.nsg_id
+-  extra_disks         = []
++  source           = "../../hetzner/compute"
++  role             = "monitoring"
++  cloud_provider   = var.cloud_provider
++  instance_type    = var.instance_type["monitoring"]
++  vm_count         = var.vm_count["monitoring"]
++  region           = var.region
++  ssh_key          = var.ssh_key
++  network_id       = module.network.network_id
++  firewall_id      = module.network.firewall_id
++  extra_disks      = []
++  #hcloud_ssh_key_name = var.hcloud_ssh_key_name
+ }
+diff -ru modules/cloud/azure/pv.tf modules/cloud/hetzner/pv.tf
+--- modules/cloud/azure/pv.tf	2025-03-30 12:01:10.761050000 +0200
++++ modules/cloud/hetzner/pv.tf	2025-03-30 12:01:21.133202400 +0200
+@@ -18,7 +18,7 @@
+     connection {
+       type        = "ssh"
+       user        = "adminuser"
+-      private_key = file("~/.ssh/id_rsa")
++      private_key = file("~/.ssh/id_ed25519")
+       host        = module.management_server.vm_ips[0]
+     }
+   }
+diff -ru modules/cloud/azure/variables.tf modules/cloud/hetzner/variables.tf
+--- modules/cloud/azure/variables.tf	2025-03-28 11:33:45.992076200 +0100
++++ modules/cloud/hetzner/variables.tf	2025-03-28 11:58:12.780547900 +0100
+@@ -30,3 +30,7 @@
+   }))
+   default = []
+ }
++
++# variable "hcloud_ssh_key_name" {
++#   type = string
++# }

@@ -1,8 +1,0 @@
-#cloud-config
-users:
-  - name: adminuser
-    groups: sudo
-    shell: /bin/bash
-    sudo: ['ALL=(ALL) NOPASSWD:ALL']
-    ssh-authorized-keys:
-      - ${file("~/.ssh/id_ed25519.pub")}
